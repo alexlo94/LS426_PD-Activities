@@ -484,7 +484,7 @@ to download_player_results
   ]
 
   file-open "player_results.txt"
-  foreach player_data [x -> foreach x file-print]
+  foreach player_data []
   file-close-all
   output-show "Player results downloaded"
 end
@@ -969,7 +969,7 @@ Score
 10.0
 true
 true
-"clear-plot\nask sort turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n]" "clear-plot\nask sort turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n plotxy who cumulative_score\n]"
+"clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n]" "clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n plotxy who cumulative_score\n]"
 PENS
 
 MONITOR

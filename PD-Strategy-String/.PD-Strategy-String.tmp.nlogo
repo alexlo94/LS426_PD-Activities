@@ -144,7 +144,7 @@ to setup
     set has_played FALSE
     set last_opponent ""
     set partnered FALSE
-    set strategy_string ""
+    set strategy_string player_strategy_string
     set move_history ""
     set my_opponent ""
     set label cumulative_score
@@ -280,7 +280,7 @@ to clear_matches
       set game_score 0
       set has_played FALSE
       set my_opponent ""
-      if ([breed] of self = players) [set strategy_string ""]
+      ;;if ([breed] of self = players) [set strategy_string ""]
     ]
     die
   ]
@@ -314,7 +314,7 @@ end
 ;; procedure that is called to calculate the results of a given turn in a given game of PD
 ;; used by the links that are maintaining the game
 to check_turn_results
-  if (players_ready != count both-ends with [breed = players]) or (turn_played = TRUE) [ stop ] ;; if not all players are ready or if this link has played this turn, don't check results
+  ;;if (players_ready != count both-ends with [breed = players]) or (turn_played = TRUE) [ stop ] ;; if not all players are ready or if this link has played this turn, don't check results
 
   ;; if all players are ready, then proceed to compute the turn results.
 
@@ -484,7 +484,7 @@ to download_player_results
   ]
 
   file-open "player_results.txt"
-  foreach player_data file-print
+  foreach player_data
   file-close-all
   output-show "Player results downloaded"
 end
@@ -537,7 +537,7 @@ num_turns
 num_turns
 1
 20
-2.0
+20.0
 1
 1
 turns
@@ -552,7 +552,7 @@ num_games
 num_games
 1
 20
-3.0
+20.0
 1
 1
 games
@@ -602,40 +602,6 @@ curr_game
 1
 14
 
-BUTTON
-573
-719
-765
-776
-Cooperate
-handle_user_input \"T\"
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-0
-
-BUTTON
-785
-719
-978
-776
-Defect
-handle_user_input \"F\"
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
-
 OUTPUT
 1128
 563
@@ -669,7 +635,7 @@ num_androids
 num_androids
 1
 100
-5.0
+49.0
 2
 1
 androids
@@ -1033,6 +999,17 @@ NIL
 NIL
 NIL
 1
+
+INPUTBOX
+641
+705
+946
+765
+player_strategy_string
+TC
+1
+0
+String
 
 @#$#@#$#@
 ## WHAT IS IT?
