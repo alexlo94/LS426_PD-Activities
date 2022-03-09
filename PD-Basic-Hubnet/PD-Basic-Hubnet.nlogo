@@ -1,39 +1,33 @@
 ;;
-;; EXTENSIONS
-;;
-extensions [
-  array
-]
-
-;;
 ;; BREEDS
 ;;
 breed [players player]
 
 turtles-own [
-  name
-  game_score
-  cumulative_score
-  has_played
-  last_opponent
-  my_opponent
-  partnered
-  strategy_string
-  move_history
-  num_wins
-  num_losses
-  base_shape
+  name ;; the name of the player, unused for now, to be used in the hubnet version of this simulation
+  game_score ;; the score of a player in a given game of PD
+  cumulative_score ;; the cumulative score of a player in this simulation
+  has_played ;; boolean variable to keep track of whether a player has played this turn
+  last_opponent ;; the player's last opponent
+  my_opponent ;; the player's current opponent
+  partnered ;; boolean variable to keep track of whether a player is partnered with another player. Used during matchmaking procedures
+  strategy_string ;; A string representation of the player's intended moves for the simulation. Valid characters include T (cooperate), F (defect), C (copy), O (oppose)
+  move_history ;; A string representation of the player's move history. Different from the strategy string in that it only includes T's and F's
+  num_wins ;; The number of wins a player has in this simulation
+  num_losses ;; the number of losses a player has in this simulation
+  base_shape ;; the base shape of the player, used to refer to the player in the UI along with the string representation of their color
 ]
 
 players-own [
-  user-id
-  move_to_play
+  user-id ;; hubnet user-id
+  move_to_play ;; move to be played this turn
 ]
 
 links-own [
-  players_ready
-  turn_played
-  game_string
+  players_ready ;; boolean variable to keep track of whether both players at the ends of this link are ready
+  turn_played ;; boolean variable to keep track of whether this link has played out the current turn
+  game_string ;; A string representation of this game's results so far [Not needed anymore]
+  game_results ;; A list of all turn results in this game in the form of strings
 ]
 
 
@@ -41,12 +35,11 @@ links-own [
 ;; GLOBALS
 ;;
 globals [
-  curr_turn
-  curr_game
-  player_score
-  ai_score
-  data_string
-  player_moves
+  curr_turn ;; the current turn of the simulation in integer form
+  curr_game ;; the current game of the simulation in integer form
+  data_string ;; A string representation of this simulation's results so far [Not needed anymore]
+  simulation_data ;; a list of all the game_results from all the links
+  player_data ;; a list of all the game_results from links that they player has been part of
 
   ;; Payoff Matrix
   TT_val ;; What both players get on a TT scenario
@@ -55,11 +48,11 @@ globals [
   FF_val ;; What both players get on an FF scenario
 
   ;; Game State
-  STATE
-  SIM_NOT_READY
-  SIM_READY
-  SIM_IN_PROGRESS
-  SIM_ENDED
+  STATE ;; variable to store the state
+  SIM_NOT_READY ;; indicates that the simulation hasn't been initialized (i.e. setup hasn't been run)
+  SIM_READY ;; indicates that the simulation has been initialized (i.e. setup has been run)
+  SIM_IN_PROGRESS ;; inidicates that the simulation has started running (i.e. the go button has been hit)
+  SIM_ENDED ;; indicates that the simulation has reached the end (i.e. all games have been played)
 
   ;; Strategies for Androids
   ;; These can be expanded upon later
@@ -69,6 +62,7 @@ globals [
   SUS_TIT_FOR_TAT
   COPYCAT
   CONTRARIAN
+  STRATEGIES
 
   ;; Shapes
   shape-names            ;; list of names of the non-sick shapes a client's turtle can have
@@ -79,7 +73,7 @@ globals [
 ]
 
 ;;
-;; STARTUP
+;; STARTUP PROCEDURES
 ;;
 
 to startup
@@ -100,6 +94,37 @@ end
 ;;
 ;; SETUP PROCEDURES
 ;;
+
+to setup_global_vars
+  set-default-shape turtles "computer workstation"
+  set curr_turn 1
+  set curr_game 1
+  set data_string ""
+  set player_data []
+  set simulation_data []
+end
+
+;; create payoff matrix for this simulation
+;; these can be changed to reference a slider that the user/organizer has access to
+;; referencing the sliders and setting a global according to them on setup will prevent users from accidentally changing the payoff matrix mid-simulation
+to setup_payoff_matrix
+  set TT_val TT_payoff
+  set TF_loser_val TF_loser_payoff
+  set TF_winner_val TF_winner_payoff
+  set FF_val FF_payoff
+end
+
+;; define the different strategies and put them in a list
+to setup_strategies
+  set ALWAYS_COOPERATE "T"
+  set ALWAYS_DEFECT "F"
+  set TIT_FOR_TAT "TC"
+  set SUS_TIT_FOR_TAT "FC"
+  set COPYCAT "C"
+  set CONTRARIAN "O"
+
+  set STRATEGIES (list ALWAYS_COOPERATE ALWAYS_DEFECT TIT_FOR_TAT SUS_TIT_FOR_TAT COPYCAT CONTRARIAN)
+end
 
 to setup-vars
   set shape-names ["box" "star" "wheel" "target" "cat" "dog"
@@ -148,29 +173,10 @@ to setup
   ask players [reset_player_state]
 
   reset-ticks
-  set-default-shape turtles "computer workstation"
-  set curr_turn 1
-  set curr_game 1
-  set player_score 0
-  set ai_score 0
-  set data_string ""
 
-
-  ;; create payoff matrix for this simulation
-  ;; these can be changed to reference a slider that the user/organizer has access to
-  ;; referencing the sliders and setting a global according to them on setup will prevent users from accidentally changing the payoff matrix mid-simulation
-  set TT_val TT_payoff
-  set TF_loser_val TF_loser_payoff
-  set TF_winner_val TF_winner_payoff
-  set FF_val FF_payoff
-
-  ;; define the different strategies
-  set ALWAYS_COOPERATE "T"
-  set ALWAYS_DEFECT "F"
-  set TIT_FOR_TAT "TC"
-  set SUS_TIT_FOR_TAT "FC"
-  set COPYCAT "C"
-  set CONTRARIAN "O"
+  setup_global_vars
+  setup_payoff_matrix
+  setup_strategies
 
   create-turtles num_androids [
     set name "ai"
@@ -181,7 +187,7 @@ to setup
     set last_opponent ""
     set partnered FALSE
 
-    set strategy_string one-of (list (ALWAYS_COOPERATE) (ALWAYS_DEFECT) (TIT_FOR_TAT) (COPYCAT) (CONTRARIAN))
+    set strategy_string one-of strategies
     set move_history ""
     set my_opponent ""
     set-unique-shape-and-color
@@ -197,10 +203,7 @@ to setup
   ;; set state to ready
   set STATE SIM_READY
 
-  ask players [
-      show "send info block has been reached"
-      send-info-to-clients
-    ]
+  ask players [ send-info-to-clients ]
 end
 
 ;;
@@ -210,59 +213,24 @@ end
 to go
   ;; If simulation has ended stop
   if (STATE = SIM_ENDED) [stop]
+  ;; Set state if this is the first iteration of go
+  if (STATE != SIM_IN_PROGRESS) [set STATE SIM_IN_PROGRESS]
 
   listen-clients
   ask players [
       show "send info block has been reached"
-      send-info-to-clients
+      send-info-to-clients ;; TODO: make sure we really need this
     ]
-
-  ;; Set state if this is the first iteration of go
-  if (STATE != SIM_IN_PROGRESS) [set STATE SIM_IN_PROGRESS]
 
   ask links [
     check_turn_results
   ]
 
+  ;; if all links have played their turn, tick, and increment the turn and game counters as needed
   if not (any? links with [turn_played = FALSE]) [
-    ask links [
-      set turn_played FALSE ;; turn played is false
-      set players_ready 0 ;; no players are ready this turn
-      ask both-ends [
-        set has_played FALSE ;; both ends have not played this turn
-      ]
-    ]
-
-    ;; increment turn and game counter
-    if (curr_game = num_games and curr_turn = num_turns) [ ;; if the current game is the last game, stop the simulation
-
-      ask links [
-        set data_string (word data_string game_string) ;; make the links commit their game data to the data string
-        assign_wins
-      ]
-
-      output-show "The simulation has ended, all games have been played"
-      set STATE SIM_ENDED
-      stop
-    ]
-
-    if-else (curr_turn = num_turns) [ ;; if the current turn is the last turn in a game, increment the game counter and set the turn counter to 0
-
-      ask links [
-        set data_string (word data_string game_string) ;; make the links commit their game data to the data string
-        assign_wins
-      ]
-
-      set curr_game curr_game + 1
-      set curr_turn 1
-
-      clear_matches
-      ;; match all the prisoners
-      match_prisoners
-    ] [
-      set curr_turn curr_turn + 1 ;; if none of the above cases are true, just increment the turn counter
-      ask players [hubnet-send user-id "Your Move This Turn Will Be:" ""]
-    ]
+    ;; ask links to reset their state
+    ask links [ reset_link_state ]
+    advance_game_state
     tick
     ask players [
       show "send info block has been reached"
@@ -271,10 +239,55 @@ to go
   ]
 end
 
+;; helper observer procedure to increment the turn and game counter according to game state
+to advance_game_state
+  ;; reset the chosen move on the client's screen
+  ask players [hubnet-send user-id "Your Move This Turn Will Be:" ""]
+
+  ;; if the current game is the last game, stop the simulation
+  if (curr_game = num_games and curr_turn = num_turns) [
+    ask links [
+        ;;set data_string (word data_string game_string) ;; make the links commit their game data to the data string
+        assign_wins
+    ]
+    output-show "The simulation has ended, all games have been played"
+    set STATE SIM_ENDED
+    stop
+  ]
+
+  ;; if the current turn is the last turn in a game, increment the game counter and set the turn counter to 1
+  if-else (curr_turn = num_turns) [
+    ask links [
+      ;;set data_string (word data_string game_string) ;; make the links commit their game data to the data string
+      set simulation_data (lput (game_results) (simulation_data))
+      assign_wins ;; make the links assign wins and losses to their ends
+    ]
+    set curr_game curr_game + 1
+    set curr_turn 1
+
+    ;; now that we've started a new game, clear all the old matches and make new ones
+    clear_matches
+    match_prisoners
+  ] [
+    set curr_turn curr_turn + 1 ;; if none of the above cases are true, just increment the turn counter
+    ]
+end
+
+;; helper link procedure to reset link state at the end of a turn
+to reset_link_state
+  set turn_played FALSE ;; turn played is false
+  set players_ready 0 ;; no players are ready this turn
+  ask both-ends [
+    set has_played FALSE ;; both ends have not played this turn
+  ]
+end
+
 ;;
 ;; MATCHMAKING PROCEDURES
 ;;
 
+;; This procedure is done in a very un-netlogo way. In reality I should ask all the turtles to find another turtle and make a link with them instead of looping through the agentset of all turtles with partnered = false.
+;; I leave this here as a reminder of the progress I've made in understanding the language while working on this assignment.
 to match_prisoners
 
   ;; Before we match prisoners, if there isn't an even number of
@@ -293,6 +306,7 @@ to match_prisoners
         set players_ready 0
         set turn_played FALSE
         set game_string "(Turn N, Game N) | (One_turtle_ID: Move, Other_turtle_ID: Move) | Results: (+One_turtle_gain, +Other_turtle_gain)\r" ;; the format of the game string
+        set game_results []
       ]
 
       set partnered TRUE
@@ -340,15 +354,10 @@ to handle_user_input [action]
     set strategy_string new_strat_string ;; update player's strategy string
     set has_played TRUE ;; indicate that we've made a move this turn
 
-    ;; if there's no easier way to reference links that this turtle is part of, this language is a joke lmao
-    ;; !! this only works under the assumption that a turtle is only ever part of one link !!
-    let neighbor_turtle one-of other in-link-neighbors ;; get the opponent so we can call the link we're part of
-    let my_link link who [who] of neighbor_turtle ;; get the link we're part of
-
     send-info-to-clients
     hubnet-send user-id "Your Move This Turn Will Be:" action
 
-    ask my_link [
+    ask one-of my-links [
       set players_ready players_ready + 1
       check_turn_results
     ]
@@ -362,9 +371,8 @@ to check_turn_results
 
   ;; if all players are ready, then proceed to compute the turn results.
 
-  ;; get references to both turtles on the ends of this link
-  let one_turtle one-of sort both-ends ;; get one of the two turtles in this link
-  let other_turtle one-of sort both-ends with [who != [who] of one_turtle] ;; get the other turtle that isn't the one we got earlier
+  let one_turtle end1
+  let other_turtle end2
 
   ;; pre-process the command of each turtle for this turn (i.e. turn any copy or opposite moves into cooperate or defects)
   let one_turtle_eval eval_move_string one_turtle other_turtle
@@ -375,83 +383,51 @@ to check_turn_results
 
   ;; calculate the results of the turn given one_turtle's and other_turtle's moves using the payoff matrix, update the game score, cumulative score, and move history
   ;; this really should be removed to a separate procedure but I can't figure out how to keep a mapping the evals to the turtles without being in this context so this procedure is bloated
+  ;; this also could be a switch statement but I'm not sure how to do those in netlogo
   if (one_turtle_eval = "T") and (other_turtle_eval = "T") [ ;; TT Scenario
-    ask one_turtle [ ;; The fact that a command like set (([game_score]) of (one_turtle)) (TT_val) isn't possible for these lines is preposterous
-      set game_score game_score + TT_val
-      set cumulative_score cumulative_score + TT_val
-      set move_history (word move_history "T")
-    ]
-    ask other_turtle [
-      set game_score game_score + TT_val
-      set cumulative_score cumulative_score + TT_val
-      set move_history (word move_history "T")
-    ]
-
+    ask one_turtle [ update_turtle_results "T" TT_val ]
+    ask other_turtle [ update_turtle_results "T" TT_val ]
     set one_turtle_gain TT_val
     set other_turtle_gain TT_val
   ]
   if (one_turtle_eval = "T") and (other_turtle_eval = "F") [ ;; TF Scenario
-    ask one_turtle [
-      set game_score game_score + TF_loser_val
-      set cumulative_score cumulative_score + TF_loser_val
-      set move_history (word move_history "T")
-    ]
-    ask other_turtle [
-      set game_score game_score + TF_winner_val
-      set cumulative_score cumulative_score + TF_winner_val
-      set move_history (word move_history "F")
-    ]
-
+    ask one_turtle [ update_turtle_results "T" TF_loser_val ]
+    ask other_turtle [ update_turtle_results "F" TF_winner_val ]
     set one_turtle_gain TF_loser_val
     set other_turtle_gain TF_winner_val
   ]
   if (one_turtle_eval = "F") and (other_turtle_eval = "T") [ ;; FT Scenario
-    ask one_turtle [
-      set game_score game_score + TF_winner_val
-      set cumulative_score cumulative_score + TF_winner_val
-      set move_history (word move_history "F")
-    ]
-    ask other_turtle [
-      set game_score game_score + TF_loser_val
-      set cumulative_score cumulative_score + TF_loser_val
-      set move_history (word move_history "T")
-    ]
-
+    ask one_turtle [ update_turtle_results "F" TF_winner_val ]
+    ask other_turtle [ update_turtle_results "T" TF_loser_val ]
     set one_turtle_gain TF_winner_val
     set other_turtle_gain TF_loser_val
   ]
   if (one_turtle_eval = "F") and (other_turtle_eval = "F") [ ;; FF Scenario
-    ask one_turtle [
-      set game_score game_score + FF_val
-      set cumulative_score cumulative_score + FF_val
-      set move_history (word move_history "F")
-    ]
-    ask other_turtle [
-      set game_score game_score + FF_val
-      set cumulative_score cumulative_score + FF_val
-      set move_history (word move_history "F")
-    ]
-
+    ask one_turtle [ update_turtle_results "F" FF_val ]
+    ask other_turtle [ update_turtle_results "F" FF_val ]
     set one_turtle_gain FF_val
     set other_turtle_gain FF_val
   ]
 
+  ;; ask both turtles to update their labels with the new scores we just computed
   ask one_turtle [set label cumulative_score]
   ask other_turtle [set label cumulative_score]
 
   ;; create the output string for this game
-  ;;  hubnet-send user-id "You are a:" (word (color-string color) " " base_shape)
-  ;;  hubnet-send user-id "Your Opponent is a:" (word (color-string [color] of my_opponent) " " ([base_shape] of my_opponent))
   ;; output string has the form:
   ;; (Turn N, Game N) | (One_turtle_ID: Move, Other_turtle_ID: Move) | Results: (+One_turtle_gain, +Other_turtle_gain)
   let output_string ""
   set output_string (word ("(Turn ") (curr_turn) (" , ") ("Game ") (curr_game) (") | (") (color-string [color] of one_turtle) (" ") ([base_shape] of one_turtle) (": ") (one_turtle_eval) (", ") (color-string [color] of other_turtle) (" ") ([base_shape] of other_turtle) (": ") (other_turtle_eval) (") | (") ("Result: (+") (one_turtle_gain) (", +") (other_turtle_gain) (")"))
 
   ;; if a player is part of this link, then output the result
-  if count both-ends with [breed = players] > 0 [output-show output_string]
+  if count both-ends with [breed = players] > 0 [
+    output-show output_string
+    set player_data (lput (output_string) (player_data))
+  ]
 
-  ;; update this link's game string
-  set (game_string) (word (game_string) (output_string))
+  ;; update this link's game results list
+  ;;set (game_string) (word (game_string) (output_string))
+  set game_results (lput (output_string) (game_results))
 
   ;; indicate that our turn has been played so the observer can pass us over
   set turn_played TRUE
@@ -463,17 +439,7 @@ to-report eval_move_string [moving_turtle opponent_turtle]
   let temp_move "T" ;; if there's no valid move to copy or oppose, then copy and oppose will evaluate to cooperate
 
   ;; retrieve the appropriate item from the strategy string based on wrap or no-wrap
-  let pointer (curr_turn - 1)
-  let ss_length length ([strategy_string] of moving_turtle)
-  let desired_move ""
-
-  if-else strategy_wrap [
-    set desired_move item ((pointer) mod (length ([strategy_string] of moving_turtle))) ([strategy_string] of moving_turtle)
-  ][
-    let temp_list (list (pointer) (length ([strategy_string] of moving_turtle) - 1))
-    let index min temp_list
-    set desired_move item (index) ([strategy_string] of moving_turtle)
-  ]
+  let desired_move get_desired_move moving_turtle
 
   ;; in case we want to copy our opponents last move
   if desired_move = "C" [
@@ -497,13 +463,41 @@ to-report eval_move_string [moving_turtle opponent_turtle]
   report temp_move
 end
 
+;; helper turtle procedure to update the relevant variables during the calculate_results link procedure
+;; takes in a move string (i.e. "T") and a payoff value and updates this turtle's move history and score variables.
+to update_turtle_results [move_string payoff_value]
+  set game_score game_score + payoff_value
+  set cumulative_score cumulative_score + payoff_value
+  set move_history (word move_history move_string)
+end
+
+;; helper link procedure used when evaluating turtle move strings
+;; computes and returns the index of the desired move based on wrap vs no-wrap as set by the organizer
+;; takes in the turtle whose move index we are computing
+to-report get_desired_move [target_turtle]
+  let pointer (curr_turn - 1)
+  let ss_length length ([strategy_string] of target_turtle)
+  let move ""
+
+  if-else strategy_wrap [
+    set move item ((pointer) mod (ss_length)) ([strategy_string] of target_turtle) ;; if wrap, mod the pointer value with the length of the string
+  ][
+    let temp_list (list (pointer) (ss_length - 1)) ;; if no-wrap, pick the minimum between the pointer value and the length of the string (i.e. when pointer > ss_length we pick ss_length)
+    let index min temp_list
+    set move item (index) ([strategy_string] of target_turtle)
+  ]
+
+  report move
+end
+
+;; helper link procedure to assign wins and losses properly to the turtles at the end of this link
 to assign_wins
   ;; get references to both turtles on the ends of this link
-  let one_turtle one-of sort both-ends ;; get one of the two turtles in this link
-  let other_turtle one-of sort both-ends with [who != [who] of one_turtle] ;; get the other turtle that isn't the one we got earlier
+  let one_turtle end1
+  let other_turtle end2
 
   let output_string ""
-  set output_string (word ("Game ") (curr_game) (" | ") (one_turtle) (": ") ([game_score] of one_turtle) (", ") (other_turtle) (": ") ([game_score] of other_turtle) (" | Result: "))
+  set output_string (word ("Game ") (curr_game) (" | ") (color-string [color] of one_turtle) (" ") ([base_shape] of one_turtle) (": ") ([game_score] of one_turtle) (", ") (color-string [color] of other_turtle) (" ") ([base_shape] of other_turtle) (": ") ([game_score] of other_turtle) (" | Result: "))
 
   if [game_score] of one_turtle > [game_score] of other_turtle [
     ask one_turtle [set num_wins num_wins + 1]
@@ -522,24 +516,42 @@ to assign_wins
   ]
 
   ;; if a player is part of this link, then output the result
-  if count both-ends with [breed = players] > 0 [output-show output_string]
+  if count both-ends with [breed = players] > 0 [
+    output-show output_string
+    set player_data (lput (output_string) (player_data))
+  ]
 
   ;; update this link's game string
-  set (game_string) (word (game_string) (output_string))
-
+  ;;set game_string (word (game_string) (output_string))
+  set game_results (lput (output_string) (game_results))
 end
 
 ;;
 ;; RESULTS
 ;;
 
-to download_results
-  if (STATE != SIM_ENDED) [stop]
+to download_player_results
+  if (STATE != SIM_ENDED) [
+    user-message "Downloading results is only accessible after the simulation has ended"
+    stop
+  ]
 
-  file-open "results.txt"
-  file-write data_string
+  file-open "player_results.txt"
+  foreach player_data file-print
   file-close-all
-  output-show "Results downloaded"
+  output-show "Player results downloaded"
+end
+
+to download_sim_results
+  if (STATE != SIM_ENDED) [
+    user-message "Downloading results is only accessible after the simulation has ended"
+    stop
+  ]
+
+  file-open "simulation_results.txt"
+  foreach simulation_data [x -> foreach x file-print]
+  file-close-all
+  output-show "Simulation results downloaded"
 end
 
 ;;
@@ -583,10 +595,6 @@ to create-new-player
     ;; so when you get messages from this client
     ;; later you will know which turtle it affects
     set user-id hubnet-message-source
-    set label user-id
-
-    ;; value of the corresponding widget in the client interface
-    ;;set step-size 1
 
     set size (30 / (num_androids + 1)) ;; replace this with a value based on the number of agents in the simulation
     set name "player"
@@ -598,10 +606,7 @@ to create-new-player
     set strategy_string ""
     set move_history ""
     set my_opponent ""
-    set label cumulative_score
-
-    set-plot-y-range plot-y-min plot-y-max
-    set-plot-x-range plot-x-min plot-x-max
+    set label (word user-id (" | ") cumulative_score)
 
     show label
 
@@ -612,6 +617,7 @@ to create-new-player
   ]
 end
 
+;; procedure to create a number of new turtles
 to create-new-turtles [num]
   create-turtles num [
     set name "ai"
@@ -622,13 +628,14 @@ to create-new-turtles [num]
     set last_opponent ""
     set partnered FALSE
 
-    set strategy_string one-of (list (ALWAYS_COOPERATE) (ALWAYS_DEFECT) (TIT_FOR_TAT) (COPYCAT) (CONTRARIAN))
+    set strategy_string one-of STRATEGIES
     set move_history ""
     set my_opponent ""
     set label cumulative_score
   ]
 end
 
+;; turtle procedure used by players to reset the state at the end of the simulation without having to reconnect
 to reset_player_state
     set size (30 / (num_androids + 1)) ;; replace this with a value based on the number of agents in the simulation
     set name "player"
@@ -642,7 +649,7 @@ to reset_player_state
     set my_opponent ""
     set num_wins 0
     set num_losses 0
-    set label cumulative_score
+    set label (word user-id (" | ") cumulative_score)
 end
 
 ;; when a user logs out make sure to clean up the turtle
@@ -696,7 +703,7 @@ to send-info-to-clients ;; turtle procedure
   hubnet-send user-id "Your Move History:" move_history
   hubnet-send user-id "Your Opponent's Move History:" [move_history] of my_opponent
 
-  ;;hubnet-send user-id "Match Results:" [game_string] of one-of my-links
+  if not(empty? [game_results] of one-of my-links) [hubnet-send user-id "Last Game Results:" [last game_results] of one-of my-links]
 
   hubnet-send user-id "Your Cumulative Score is:" cumulative_score
   hubnet-send user-id "Your Wins:" num_wins
@@ -746,7 +753,7 @@ num_turns
 num_turns
 1
 20
-5.0
+3.0
 1
 1
 turns
@@ -761,39 +768,17 @@ num_games
 num_games
 1
 20
-5.0
+3.0
 1
 1
 games
 HORIZONTAL
 
 MONITOR
-1336
-204
-1527
-261
-Your Score
-item 0 [game_score] of turtles with [who = 0]
-17
-1
-14
-
-MONITOR
-1542
-203
-1733
-260
-Opponent's Score
-[game_score] of (item 0 [my_opponent] of turtles with [who = 0])
-17
-1
-14
-
-MONITOR
-1130
-100
-1321
-157
+1235
+95
+1426
+152
 Current Turn
 curr_turn
 17
@@ -801,10 +786,10 @@ curr_turn
 14
 
 MONITOR
-1339
-100
-1530
-157
+1444
+95
+1635
+152
 Current Game
 curr_game
 17
@@ -812,44 +797,10 @@ curr_game
 14
 
 BUTTON
-573
-719
-765
-776
-Cooperate
-handle_user_input \"T\"
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-0
-
-BUTTON
-785
-719
-978
-776
-Defect
-handle_user_input \"F\"
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
-
-BUTTON
-219
-103
-317
-159
+223
+102
+321
+158
 Setup
 setup
 NIL
@@ -871,17 +822,17 @@ num_androids
 num_androids
 1
 100
-5.0
+7.0
 2
 1
 androids
 HORIZONTAL
 
 BUTTON
-337
-103
-434
-160
+341
+102
+438
+159
 Go
 go
 T
@@ -1077,12 +1028,12 @@ STATE
 16
 
 BUTTON
-219
-173
-434
-229
+125
+570
+340
+626
 Download Simulation Results
-download_results
+download_sim_results
 NIL
 1
 T
@@ -1093,75 +1044,11 @@ NIL
 NIL
 1
 
-MONITOR
-1129
-309
-1317
-366
-Your Wins
-item 0 [num_wins] of turtles with [who = 0]
-17
-1
-14
-
-MONITOR
-1128
-205
-1320
-262
-Your Opponent
-item 0 [my_opponent] of turtles with [who = 0]
-17
-1
-14
-
-TEXTBOX
-1128
-171
-1278
-191
-This Game
-16
-0.0
-1
-
-TEXTBOX
-1129
-278
-1279
-298
-This Simulation
-16
-0.0
-1
-
-MONITOR
-1335
-308
-1523
-365
-Cumulative Score
-item 0 [cumulative_score] of turtles with [who = 0]
-17
-1
-14
-
-MONITOR
-1541
-308
-1732
-365
-Your Losses
-item 0 [num_losses] of turtles with [who = 0]
-17
-1
-14
-
 PLOT
-1130
-394
-1418
-544
+1105
+185
+1426
+335
 Cumulative Score
 NIL
 Score
@@ -1171,25 +1058,14 @@ Score
 10.0
 true
 true
-"clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n]" "ask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n plot cumulative_score\n]"
+"clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n]" "clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n plotxy who cumulative_score\n]"
 PENS
 
-MONITOR
-1545
-99
-1732
-156
-You Are
-one-of turtles with [who = 0]
-17
-1
-14
-
 PLOT
-1438
-393
-1732
-543
+1443
+184
+1766
+334
 Number of Wins
 NIL
 NIL
@@ -1199,15 +1075,32 @@ NIL
 10.0
 true
 true
-"clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n]" "ask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n plot num_wins\n]"
+"clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n]" "clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n plotxy who num_wins\n]"
 PENS
 
 OUTPUT
-1128
-563
-1738
-772
+1105
+369
+1769
+692
 12
+
+BUTTON
+223
+170
+439
+225
+Go Once
+go
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1858,40 +1751,40 @@ NIL
 1
 
 TEXTBOX
-1065
-360
-1215
-380
+1061
+442
+1211
+462
 This Simulation
 16
 0.0
 1
 
 MONITOR
-1255
-393
-1419
-442
+1251
+475
+1415
+524
 Your Wins:
 NIL
 3
 1
 
 MONITOR
-1065
-394
-1231
-443
+1061
+476
+1227
+525
 Your Cumulative Score is:
 NIL
 3
 1
 
 MONITOR
-1444
-392
-1623
-441
+1440
+474
+1619
+523
 Your Losses:
 NIL
 3
@@ -2018,7 +1911,7 @@ NIL
 1
 
 MONITOR
-1065
+1062
 285
 1325
 334
@@ -2028,7 +1921,7 @@ NIL
 1
 
 MONITOR
-1355
+1345
 285
 1620
 334
@@ -2047,6 +1940,16 @@ NIL
 3
 1
 
+MONITOR
+1063
+360
+1620
+409
+Last Game Results:
+NIL
+3
+1
+
 @#$#@#$#@
 default
 0.0
@@ -2059,5 +1962,5 @@ true
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
 @#$#@#$#@
-1
+0
 @#$#@#$#@

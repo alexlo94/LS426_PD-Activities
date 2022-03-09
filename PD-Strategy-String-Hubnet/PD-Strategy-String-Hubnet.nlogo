@@ -15,16 +15,18 @@ turtles-own [
   move_history ;; A string representation of the player's move history. Different from the strategy string in that it only includes T's and F's
   num_wins ;; The number of wins a player has in this simulation
   num_losses ;; the number of losses a player has in this simulation
+  base_shape ;; the base shape of the player, used to refer to the player in the UI along with the string representation of their color
 ]
 
 players-own [
-
+  user-id ;; hubnet user-id
+  move_to_play ;; move to be played this turn
 ]
 
 links-own [
   players_ready ;; boolean variable to keep track of whether both players at the ends of this link are ready
   turn_played ;; boolean variable to keep track of whether this link has played out the current turn
-  ;;game_string ;; A string representation of this game's results so far [Not needed anymore]
+  game_string ;; A string representation of this game's results so far [Not needed anymore]
   game_results ;; A list of all turn results in this game in the form of strings
 ]
 
@@ -71,10 +73,12 @@ globals [
 ]
 
 ;;
-;; STARTUP
+;; STARTUP PROCEDURES
 ;;
 
 to startup
+  hubnet-reset
+
   ;; define state strings
   set SIM_NOT_READY "Simulation Not Ready"
   set SIM_READY "Simulation Ready"
@@ -83,6 +87,8 @@ to startup
 
   ;; set state to uninitialized
   set STATE SIM_NOT_READY
+
+  listen-clients
 end
 
 ;;
@@ -120,35 +126,56 @@ to setup_strategies
   set STRATEGIES (list ALWAYS_COOPERATE ALWAYS_DEFECT TIT_FOR_TAT SUS_TIT_FOR_TAT COPYCAT CONTRARIAN)
 end
 
-to setup
-  if STATE = SIM_IN_PROGRESS [stop]
+to setup-vars
+  set shape-names ["box" "star" "wheel" "target" "cat" "dog"
+                   "butterfly" "leaf" "car" "airplane"
+                   "monster" "key" "cow skull" "ghost"
+                   "cactus" "moon" "heart"]
+  ;; these colors were chosen with the goal of having colors
+  ;; that are readily distinguishable from each other, and that
+  ;; have names that everyone knows (e.g. no "cyan"!), and that
+  ;; contrast sufficiently with the red infection dots and the
+  ;; gray androids
+  set colors      (list white brown green yellow
+                        (violet + 1) (sky + 1))
+  set color-names ["white" "brown" "green" "yellow"
+                   "purple" "blue"]
+  set max-possible-codes (length colors * length shape-names)
+  set used-shape-colors []
 
-  ;;clear-all
-  cp
-  cd
-  ct ;; this may cause problems in hubnet
+end
+
+;; pick a base-shape and color for the turtle
+to set-unique-shape-and-color
+  let code random max-possible-codes
+  while [(member? (code) (used-shape-colors)) and (count players < max-possible-codes)]
+  [
+    set code random max-possible-codes
+  ]
+  set used-shape-colors (lput code used-shape-colors)
+  set base_shape item (code mod length shape-names) shape-names
+  set shape base_shape
+  set color item (code / length shape-names) colors
+end
+
+to setup
+  ;;if STATE = SIM_IN_PROGRESS [stop]
+
+  setup-vars
+  listen-clients
+
+  clear-patches
+  clear-drawing
   clear-output
+
+  ask turtles with [breed != players] [ die ]
+  ask players [reset_player_state]
+
   reset-ticks
 
   setup_global_vars
   setup_payoff_matrix
   setup_strategies
-
-
-  create-players 1 [
-    set shape "person"
-    set size (30 / (num_androids + 1)) ;; replace this with a value based on the number of agents in the simulation
-    set name "player"
-    set game_score 0
-    set cumulative_score 0
-    set has_played FALSE
-    set last_opponent ""
-    set partnered FALSE
-    set strategy_string player_strategy_string
-    set move_history ""
-    set my_opponent ""
-    set label cumulative_score
-  ]
 
   create-turtles num_androids [
     set name "ai"
@@ -159,11 +186,14 @@ to setup
     set last_opponent ""
     set partnered FALSE
 
-    set strategy_string one-of STRATEGIES
+    set strategy_string one-of strategies
     set move_history ""
     set my_opponent ""
+    set-unique-shape-and-color
     set label cumulative_score
   ]
+
+  listen-clients
 
   layout-circle turtles (world-width / 3)
 
@@ -171,6 +201,8 @@ to setup
 
   ;; set state to ready
   set STATE SIM_READY
+
+  ask players [ send-info-to-clients ]
 end
 
 ;;
@@ -180,11 +212,14 @@ end
 to go
   ;; If simulation has ended stop
   if (STATE = SIM_ENDED) [stop]
-
   ;; Set state if this is the first iteration of go
   if (STATE != SIM_IN_PROGRESS) [set STATE SIM_IN_PROGRESS]
 
-  ;; ask all links to check their results for the current turn
+  listen-clients
+  ask players [
+      send-info-to-clients ;; TODO: make sure we really need this
+    ]
+
   ask links [
     check_turn_results
   ]
@@ -193,13 +228,19 @@ to go
   if not (any? links with [turn_played = FALSE]) [
     ;; ask links to reset their state
     ask links [ reset_link_state ]
-    tick
     advance_game_state
+    tick
+    ask players [
+      send-info-to-clients
+    ]
   ]
 end
 
 ;; helper observer procedure to increment the turn and game counter according to game state
 to advance_game_state
+  ;; reset the chosen move on the client's screen
+  ;;ask players [hubnet-send user-id "Your Move This Turn Will Be:" ""]
+
   ;; if the current game is the last game, stop the simulation
   if (curr_game = num_games and curr_turn = num_turns) [
     ask links [
@@ -245,6 +286,13 @@ end
 ;; This procedure is done in a very un-netlogo way. In reality I should ask all the turtles to find another turtle and make a link with them instead of looping through the agentset of all turtles with partnered = false.
 ;; I leave this here as a reminder of the progress I've made in understanding the language while working on this assignment.
 to match_prisoners
+
+  ;; Before we match prisoners, if there isn't an even number of
+  if ((count turtles) mod (2)) != 0 [
+    create-new-turtles 1
+    layout-circle turtles (world-width / 3)
+  ]
+
   while [any? turtles with [partnered = FALSE]] [
     ask one-of turtles with [partnered = FALSE] [
       let me self
@@ -254,7 +302,7 @@ to match_prisoners
       create-link-with other_turtle [
         set players_ready 0
         set turn_played FALSE
-        ;;set game_string "(Turn N, Game N) | (One_turtle_ID: Move, Other_turtle_ID: Move) | Results: (+One_turtle_gain, +Other_turtle_gain)" ;; the format of the game string
+        set game_string "(Turn N, Game N) | (One_turtle_ID: Move, Other_turtle_ID: Move) | Results: (+One_turtle_gain, +Other_turtle_gain)\r" ;; the format of the game string
         set game_results []
       ]
 
@@ -296,18 +344,32 @@ end
 to handle_user_input [action]
   if (STATE != SIM_IN_PROGRESS) [stop]
 
-  ask turtles with [who = 0] [ ;; in this simulation, this is the player, in hubnet activities this should refer to the turtle with the name that matches the player's UI
+  ask players with [user-id = hubnet-message-source] [ ;; in this simulation, this is the player, in hubnet activities this should refer to the turtle with the name that matches the player's UI
     if has_played [stop] ;; if the player has already played this turn, then stop
 
     let new_strat_string (word strategy_string action) ;; create new strategy string based on action
     set strategy_string new_strat_string ;; update player's strategy string
     set has_played TRUE ;; indicate that we've made a move this turn
 
-    ;; !! this only works under the assumption that a turtle is only ever part of one link !!
+    send-info-to-clients
+    hubnet-send user-id "Your Move This Turn Will Be:" action
+
     ask one-of my-links [
       set players_ready players_ready + 1
       check_turn_results
     ]
+  ]
+end
+
+;; procedure to set a player's strategy string to the one inputted by the client controlling that player
+to handle_user_strategy [input_string]
+  ;; procedure fails silently if the user tries to change their strategy string mid-simulation
+  ;; ideally, I'd like to make the input field conditionally usable based on the state of the application but oh well
+  ;;if (STATE = SIM_IN_PROGRESS) [stop]
+  show input_string
+
+  ask players with [user-id = hubnet-message-source] [
+    set strategy_string input_string
   ]
 end
 
@@ -364,7 +426,7 @@ to check_turn_results
   ;; output string has the form:
   ;; (Turn N, Game N) | (One_turtle_ID: Move, Other_turtle_ID: Move) | Results: (+One_turtle_gain, +Other_turtle_gain)
   let output_string ""
-  set output_string (word ("(Turn ") (curr_turn) (" , ") ("Game ") (curr_game) (") | (") ([who] of one_turtle) (": ") (one_turtle_eval) (", ") ([who] of other_turtle) (": ") (other_turtle_eval) (") | (") ("Result: (+") (one_turtle_gain) (", +") (other_turtle_gain) (")"))
+  set output_string (word ("(Turn ") (curr_turn) (" , ") ("Game ") (curr_game) (") | (") (color-string [color] of one_turtle) (" ") ([base_shape] of one_turtle) (": ") (one_turtle_eval) (", ") (color-string [color] of other_turtle) (" ") ([base_shape] of other_turtle) (": ") (other_turtle_eval) (") | (") ("Result: (+") (one_turtle_gain) (", +") (other_turtle_gain) (")"))
 
   ;; if a player is part of this link, then output the result
   if count both-ends with [breed = players] > 0 [
@@ -444,7 +506,7 @@ to assign_wins
   let other_turtle end2
 
   let output_string ""
-  set output_string (word ("Game ") (curr_game) (" | ") (one_turtle) (": ") ([game_score] of one_turtle) (", ") (other_turtle) (": ") ([game_score] of other_turtle) (" | Result: "))
+  set output_string (word ("Game ") (curr_game) (" | ") (color-string [color] of one_turtle) (" ") ([base_shape] of one_turtle) (": ") ([game_score] of one_turtle) (", ") (color-string [color] of other_turtle) (" ") ([base_shape] of other_turtle) (": ") ([game_score] of other_turtle) (" | Result: "))
 
   if [game_score] of one_turtle > [game_score] of other_turtle [
     ask one_turtle [set num_wins num_wins + 1]
@@ -484,7 +546,7 @@ to download_player_results
   ]
 
   file-open "player_results.txt"
-  foreach player_data
+  foreach player_data file-print
   file-close-all
   output-show "Player results downloaded"
 end
@@ -499,6 +561,166 @@ to download_sim_results
   foreach simulation_data [x -> foreach x file-print]
   file-close-all
   output-show "Simulation results downloaded"
+end
+
+;;
+;; HUBNET STUFF
+;;
+
+to listen-clients
+  ;; as long as there are more messages from the clients
+  ;; keep processing them.
+  while [ hubnet-message-waiting? ]
+  [
+    ;; get the first message in the queue
+    hubnet-fetch-message
+    ifelse hubnet-enter-message? ;; when clients enter we get a special message
+    [
+      create-new-player
+      layout-circle turtles (world-width / 3)
+    ]
+    [
+      ifelse hubnet-exit-message? ;; when clients exit we get a special message
+      [
+        remove-player
+      ]
+      [ ask players with [user-id = hubnet-message-source]
+        [ execute-command hubnet-message-tag ] ;; otherwise the message means that the user has
+      ]                                        ;; done something in the interface hubnet-message-tag
+                                               ;; is the name of the widget that was changed
+    ]
+  ]
+end
+
+;; when a new user logs in create a player turtle
+;; this turtle will store any state on the client
+;; values of sliders, etc.
+to create-new-player
+  create-players 1
+  [
+    ;; store the message-source in user-id now
+    ;; so when you get messages from this client
+    ;; later you will know which turtle it affects
+    set user-id hubnet-message-source
+
+    set size (30 / (num_androids + 1)) ;; replace this with a value based on the number of agents in the simulation
+    set name "player"
+    set game_score 0
+    set cumulative_score 0
+    set has_played FALSE
+    set last_opponent ""
+    set partnered FALSE
+    set strategy_string ""
+    set move_history ""
+    set my_opponent ""
+    set label (word user-id (" | ") cumulative_score)
+
+    set-unique-shape-and-color
+
+    ;; update the clients with any information you have set
+    ;;send-info-to-clients
+  ]
+end
+
+;; procedure to create a number of new turtles
+to create-new-turtles [num]
+  create-turtles num [
+    set name "ai"
+    set size (30 / (num_androids + 1)) ;; replace this with a value based on the number of agents in the simulation
+    set game_score 0
+    set cumulative_score 0
+    set has_played FALSE
+    set last_opponent ""
+    set partnered FALSE
+
+    set strategy_string one-of STRATEGIES
+    set move_history ""
+    set my_opponent ""
+    set label cumulative_score
+  ]
+end
+
+;; turtle procedure used by players to reset the state at the end of the simulation without having to reconnect
+to reset_player_state
+    set size (30 / (num_androids + 1)) ;; replace this with a value based on the number of agents in the simulation
+    set name "player"
+    set game_score 0
+    set cumulative_score 0
+    set has_played FALSE
+    set last_opponent ""
+    set partnered FALSE
+    set strategy_string ""
+    set move_history ""
+    set my_opponent ""
+    set num_wins 0
+    set num_losses 0
+    set label (word user-id (" | ") cumulative_score)
+end
+
+;; when a user logs out make sure to clean up the turtle
+;; that was associated with that user (so you don't try to
+;; send messages to it after it is gone) also if any other
+;; turtles of variables reference this turtle make sure to clean
+;; up those references too.
+to remove-player
+  ask players with [user-id = hubnet-message-source] [
+    ;; if a player leaves the simulation, they just get their breed changed to a regular turtle
+    set name "ai"
+    set size (30 / (num_androids + 1)) ;; replace this with a value based on the number of agents in the simulation
+    set game_score 0
+    set cumulative_score 0
+    set has_played FALSE
+    set last_opponent ""
+    set partnered FALSE
+
+    set move_history ""
+    set my_opponent ""
+    set label cumulative_score
+
+    set strategy_string one-of (list (ALWAYS_COOPERATE) (ALWAYS_DEFECT) (TIT_FOR_TAT) (COPYCAT) (CONTRARIAN))
+    set breed turtles
+  ]
+end
+
+to execute-command [command]
+  if command = "Cooperate" [handle_user_input "T"]
+  if command = "Defect" [handle_user_input "F"]
+  if command = "strategy_string" [handle_user_strategy hubnet-message]
+end
+
+;; whenever something in world changes that should be displayed in
+;; a monitor on the client send the information back to the client
+to send-info-to-clients ;; turtle procedure
+  hubnet-send user-id "Simulation State:" STATE
+  hubnet-send user-id "Current Turn:" curr_turn
+  hubnet-send user-id "Current Game:" curr_game
+  hubnet-send user-id "Number of Games This Simulation Will Last" num_games
+  hubnet-send user-id "Strategy Wrap Enabled?" strategy_wrap
+  hubnet-send user-id "Number of AI Players" num_androids
+  hubnet-send user-id "TT Payoff" TT_val
+  hubnet-send user-id "TF Winner Payoff" TF_winner_val
+  hubnet-send user-id "TF Loser Payoff" TF_loser_val
+  hubnet-send user-id "FF Payoff" FF_val
+
+  hubnet-send user-id "You are a:" (word (color-string color) " " base_shape)
+  hubnet-send user-id "Your Opponent is a:" (word (color-string [color] of my_opponent) " " ([base_shape] of my_opponent))
+  hubnet-send user-id "Your Score is:" game_score
+  hubnet-send user-id "Your Opponent's Score is:" [game_score] of my_opponent
+  hubnet-send user-id "Your Move History:" move_history
+  hubnet-send user-id "Your Opponent's Move History:" [move_history] of my_opponent
+
+  if not(empty? [game_results] of one-of my-links) [hubnet-send user-id "Last Game Results:" [last game_results] of one-of my-links]
+
+  hubnet-send user-id "Your Cumulative Score is:" cumulative_score
+  hubnet-send user-id "Your Wins:" num_wins
+  hubnet-send user-id "Your Losses:" num_losses
+
+  ;;hubnet-send user-id "Your Move This Turn Will Be:" "" ;;reset what their chosen move is
+end
+
+;; report the string version of the turtle's color
+to-report color-string [color-value]
+  report item (position color-value colors) color-names
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -537,7 +759,7 @@ num_turns
 num_turns
 1
 20
-20.0
+3.0
 1
 1
 turns
@@ -552,39 +774,17 @@ num_games
 num_games
 1
 20
-20.0
+3.0
 1
 1
 games
 HORIZONTAL
 
 MONITOR
-1336
-204
-1527
-261
-Your Score
-item 0 [game_score] of turtles with [who = 0]
-17
-1
-14
-
-MONITOR
-1542
-203
-1733
-260
-Opponent's Score
-[game_score] of (item 0 [my_opponent] of turtles with [who = 0])
-17
-1
-14
-
-MONITOR
-1127
-100
-1318
-157
+1235
+95
+1426
+152
 Current Turn
 curr_turn
 17
@@ -592,28 +792,21 @@ curr_turn
 14
 
 MONITOR
-1339
-100
-1530
-157
+1444
+95
+1635
+152
 Current Game
 curr_game
 17
 1
 14
 
-OUTPUT
-1128
-563
-1738
-772
-12
-
 BUTTON
-219
-103
-317
-159
+223
+102
+321
+158
 Setup
 setup
 NIL
@@ -635,17 +828,17 @@ num_androids
 num_androids
 1
 100
-49.0
+7.0
 2
 1
 androids
 HORIZONTAL
 
 BUTTON
-337
-103
-434
-160
+341
+102
+438
+159
 Go
 go
 T
@@ -841,10 +1034,10 @@ STATE
 16
 
 BUTTON
-120
-573
-335
-629
+125
+570
+340
+626
 Download Simulation Results
 download_sim_results
 NIL
@@ -857,75 +1050,11 @@ NIL
 NIL
 1
 
-MONITOR
-1129
-309
-1317
-366
-Your Wins
-item 0 [num_wins] of turtles with [who = 0]
-17
-1
-14
-
-MONITOR
-1128
-205
-1320
-262
-Your Opponent
-item 0 [my_opponent] of turtles with [who = 0]
-17
-1
-14
-
-TEXTBOX
-1128
-171
-1278
-191
-This Game
-16
-0.0
-1
-
-TEXTBOX
-1129
-278
-1279
-298
-This Simulation
-16
-0.0
-1
-
-MONITOR
-1335
-308
-1523
-365
-Cumulative Score
-item 0 [cumulative_score] of turtles with [who = 0]
-17
-1
-14
-
-MONITOR
-1541
-308
-1732
-365
-Your Losses
-item 0 [num_losses] of turtles with [who = 0]
-17
-1
-14
-
 PLOT
-1130
-394
-1418
-544
+1105
+185
+1426
+335
 Cumulative Score
 NIL
 Score
@@ -938,22 +1067,11 @@ true
 "clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n]" "clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n plotxy who cumulative_score\n]"
 PENS
 
-MONITOR
-1545
-99
-1732
-156
-You Are
-one-of turtles with [who = 0]
-17
-1
-14
-
 PLOT
-1438
-393
-1732
-543
+1443
+184
+1766
+334
 Number of Wins
 NIL
 NIL
@@ -966,28 +1084,18 @@ true
 "clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n]" "clear-plot\nask turtles [\n create-temporary-plot-pen (word self)\n set-current-plot-pen (word self)\n set-plot-pen-color color\n set-plot-pen-mode 1\n plotxy who num_wins\n]"
 PENS
 
-BUTTON
-120
-640
-335
-696
-Download Player Results
-download_player_results
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
+OUTPUT
+1105
+369
+1769
+692
+12
 
 BUTTON
-219
-172
-435
-228
+223
+170
+439
+225
 Go Once
 go
 NIL
@@ -999,17 +1107,6 @@ NIL
 NIL
 NIL
 1
-
-INPUTBOX
-641
-705
-946
-765
-player_strategy_string
-TC
-1
-0
-String
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1058,6 +1155,16 @@ true
 0
 Polygon -7500403 true true 150 0 135 15 120 60 120 105 15 165 15 195 120 180 135 240 105 270 120 285 150 270 180 285 210 270 165 240 180 180 285 195 285 165 180 105 180 60 165 15
 
+android
+false
+0
+Polygon -7500403 true true 210 90 240 195 210 210 165 90
+Circle -7500403 true true 110 3 80
+Polygon -7500403 true true 105 88 120 193 105 240 105 298 135 300 150 210 165 300 195 298 195 240 180 193 195 88
+Rectangle -7500403 true true 127 81 172 96
+Rectangle -16777216 true false 135 33 165 60
+Polygon -7500403 true true 90 90 60 195 90 210 135 90
+
 arrow
 true
 0
@@ -1083,16 +1190,36 @@ Line -7500403 true 150 100 80 30
 Line -7500403 true 150 100 220 30
 
 butterfly
-true
+false
 0
-Polygon -7500403 true true 150 165 209 199 225 225 225 255 195 270 165 255 150 240
-Polygon -7500403 true true 150 165 89 198 75 225 75 255 105 270 135 255 150 240
-Polygon -7500403 true true 139 148 100 105 55 90 25 90 10 105 10 135 25 180 40 195 85 194 139 163
-Polygon -7500403 true true 162 150 200 105 245 90 275 90 290 105 290 135 275 180 260 195 215 195 162 165
-Polygon -16777216 true false 150 255 135 225 120 150 135 120 150 105 165 120 180 150 165 225
-Circle -16777216 true false 135 90 30
-Line -16777216 false 150 105 195 60
-Line -16777216 false 150 105 105 60
+Rectangle -7500403 true true 92 135 207 224
+Circle -7500403 true true 158 53 134
+Circle -7500403 true true 165 180 90
+Circle -7500403 true true 45 180 90
+Circle -7500403 true true 8 53 134
+Line -16777216 false 43 189 253 189
+Rectangle -7500403 true true 135 60 165 285
+Circle -7500403 true true 165 15 30
+Circle -7500403 true true 105 15 30
+Line -7500403 true 120 30 135 60
+Line -7500403 true 165 60 180 30
+Line -16777216 false 135 60 135 285
+Line -16777216 false 165 285 165 60
+
+cactus
+false
+0
+Rectangle -7500403 true true 135 30 175 177
+Rectangle -7500403 true true 67 105 100 214
+Rectangle -7500403 true true 217 89 251 167
+Rectangle -7500403 true true 157 151 220 185
+Rectangle -7500403 true true 94 189 148 233
+Rectangle -7500403 true true 135 162 184 297
+Circle -7500403 true true 219 76 28
+Circle -7500403 true true 138 7 34
+Circle -7500403 true true 67 93 30
+Circle -7500403 true true 201 145 40
+Circle -7500403 true true 69 193 40
 
 car
 false
@@ -1103,6 +1230,35 @@ Circle -16777216 true false 30 180 90
 Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
 Circle -7500403 true true 47 195 58
 Circle -7500403 true true 195 195 58
+
+cat
+false
+0
+Line -7500403 true 285 240 210 240
+Line -7500403 true 195 300 165 255
+Line -7500403 true 15 240 90 240
+Line -7500403 true 285 285 195 240
+Line -7500403 true 105 300 135 255
+Line -16777216 false 150 270 150 285
+Line -16777216 false 15 75 15 120
+Polygon -7500403 true true 300 15 285 30 255 30 225 75 195 60 255 15
+Polygon -7500403 true true 285 135 210 135 180 150 180 45 285 90
+Polygon -7500403 true true 120 45 120 210 180 210 180 45
+Polygon -7500403 true true 180 195 165 300 240 285 255 225 285 195
+Polygon -7500403 true true 180 225 195 285 165 300 150 300 150 255 165 225
+Polygon -7500403 true true 195 195 195 165 225 150 255 135 285 135 285 195
+Polygon -7500403 true true 15 135 90 135 120 150 120 45 15 90
+Polygon -7500403 true true 120 195 135 300 60 285 45 225 15 195
+Polygon -7500403 true true 120 225 105 285 135 300 150 300 150 255 135 225
+Polygon -7500403 true true 105 195 105 165 75 150 45 135 15 135 15 195
+Polygon -7500403 true true 285 120 270 90 285 15 300 15
+Line -7500403 true 15 285 105 240
+Polygon -7500403 true true 15 120 30 90 15 15 0 15
+Polygon -7500403 true true 0 15 15 30 45 30 75 75 105 60 45 15
+Line -16777216 false 164 262 209 262
+Line -16777216 false 223 231 208 261
+Line -16777216 false 136 262 91 262
+Line -16777216 false 77 231 92 261
 
 circle
 false
@@ -1132,6 +1288,16 @@ Polygon -7500403 true true 200 193 197 249 179 249 177 196 166 187 140 189 93 19
 Polygon -7500403 true true 73 210 86 251 62 249 48 208
 Polygon -7500403 true true 25 114 16 195 9 204 23 213 25 200 39 123
 
+cow skull
+false
+0
+Polygon -7500403 true true 150 90 75 105 60 150 75 210 105 285 195 285 225 210 240 150 225 105
+Polygon -16777216 true false 150 150 90 195 90 150
+Polygon -16777216 true false 150 150 210 195 210 150
+Polygon -16777216 true false 105 285 135 270 150 285 165 270 195 285
+Polygon -7500403 true true 240 150 263 143 278 126 287 102 287 79 280 53 273 38 261 25 246 15 227 8 241 26 253 46 258 68 257 96 246 116 229 126
+Polygon -7500403 true true 60 150 37 143 22 126 13 102 13 79 20 53 27 38 39 25 54 15 73 8 59 26 47 46 42 68 43 96 54 116 71 126
+
 crown
 false
 0
@@ -1147,6 +1313,22 @@ cylinder
 false
 0
 Circle -7500403 true true 0 0 300
+
+dog
+false
+0
+Polygon -7500403 true true 300 165 300 195 270 210 183 204 180 240 165 270 165 300 120 300 0 240 45 165 75 90 75 45 105 15 135 45 165 45 180 15 225 15 255 30 225 30 210 60 225 90 225 105
+Polygon -16777216 true false 0 240 120 300 165 300 165 285 120 285 10 221
+Line -16777216 false 210 60 180 45
+Line -16777216 false 90 45 90 90
+Line -16777216 false 90 90 105 105
+Line -16777216 false 105 105 135 60
+Line -16777216 false 90 45 135 60
+Line -16777216 false 135 60 135 45
+Line -16777216 false 181 203 151 203
+Line -16777216 false 150 201 105 171
+Circle -16777216 true false 171 88 34
+Circle -16777216 false false 261 162 30
 
 dot
 false
@@ -1211,6 +1393,25 @@ Circle -16777216 true false 113 68 74
 Polygon -10899396 true false 189 233 219 188 249 173 279 188 234 218
 Polygon -10899396 true false 180 255 150 210 105 210 75 240 135 240
 
+ghost
+false
+0
+Polygon -7500403 true true 30 165 13 164 -2 149 0 135 -2 119 0 105 15 75 30 75 58 104 43 119 43 134 58 134 73 134 88 104 73 44 78 14 103 -1 193 -1 223 29 208 89 208 119 238 134 253 119 240 105 238 89 240 75 255 60 270 60 283 74 300 90 298 104 298 119 300 135 285 135 285 150 268 164 238 179 208 164 208 194 238 209 253 224 268 239 268 269 238 299 178 299 148 284 103 269 58 284 43 299 58 269 103 254 148 254 193 254 163 239 118 209 88 179 73 179 58 164
+Line -16777216 false 189 253 215 253
+Circle -16777216 true false 102 30 30
+Polygon -16777216 true false 165 105 135 105 120 120 105 105 135 75 165 75 195 105 180 120
+Circle -16777216 true false 160 30 30
+
+heart
+false
+0
+Circle -7500403 true true 152 19 134
+Polygon -7500403 true true 150 105 240 105 270 135 150 270
+Polygon -7500403 true true 150 105 60 105 30 135 150 270
+Line -7500403 true 150 270 150 135
+Rectangle -7500403 true true 135 90 180 135
+Circle -7500403 true true 14 19 134
+
 house
 false
 0
@@ -1218,6 +1419,15 @@ Rectangle -7500403 true true 45 120 255 285
 Rectangle -16777216 true false 120 210 180 285
 Polygon -7500403 true true 15 120 150 15 285 120
 Line -16777216 false 30 120 270 120
+
+key
+false
+0
+Rectangle -7500403 true true 90 120 300 150
+Rectangle -7500403 true true 270 135 300 195
+Rectangle -7500403 true true 195 135 225 195
+Circle -7500403 true true 0 60 150
+Circle -16777216 true false 30 90 90
 
 leaf
 false
@@ -1234,6 +1444,23 @@ line half
 true
 0
 Line -7500403 true 150 0 150 150
+
+monster
+false
+0
+Polygon -7500403 true true 75 150 90 195 210 195 225 150 255 120 255 45 180 0 120 0 45 45 45 120
+Circle -16777216 true false 165 60 60
+Circle -16777216 true false 75 60 60
+Polygon -7500403 true true 225 150 285 195 285 285 255 300 255 210 180 165
+Polygon -7500403 true true 75 150 15 195 15 285 45 300 45 210 120 165
+Polygon -7500403 true true 210 210 225 285 195 285 165 165
+Polygon -7500403 true true 90 210 75 285 105 285 135 165
+Rectangle -7500403 true true 135 165 165 270
+
+moon
+false
+0
+Polygon -7500403 true true 175 7 83 36 25 108 27 186 79 250 134 271 205 274 281 239 207 233 152 216 113 185 104 132 110 77 132 51
 
 pentagon
 false
@@ -1379,6 +1606,329 @@ NetLogo 6.2.2
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
+VIEW
+457
+99
+1042
+684
+0
+0
+0
+1
+1
+1
+1
+1
+0
+1
+1
+1
+-16
+16
+-16
+16
+
+TEXTBOX
+1264
+22
+1477
+53
+Simulation Output
+24
+0.0
+1
+
+TEXTBOX
+104
+24
+356
+56
+Simulation Parameters
+24
+0.0
+1
+
+MONITOR
+627
+21
+870
+70
+Simulation State:
+NIL
+3
+1
+
+MONITOR
+1065
+99
+1233
+148
+Current Turn:
+NIL
+3
+1
+
+MONITOR
+1253
+98
+1421
+147
+Current Game:
+NIL
+3
+1
+
+MONITOR
+1442
+98
+1617
+147
+You are a:
+NIL
+3
+1
+
+MONITOR
+1064
+207
+1231
+256
+Your Opponent is a:
+NIL
+3
+1
+
+TEXTBOX
+1063
+176
+1213
+196
+This Game
+16
+0.0
+1
+
+MONITOR
+1253
+206
+1417
+255
+Your Score is:
+NIL
+3
+1
+
+MONITOR
+1442
+205
+1620
+254
+Your Opponent's Score is:
+NIL
+3
+1
+
+TEXTBOX
+1061
+442
+1211
+462
+This Simulation
+16
+0.0
+1
+
+MONITOR
+1251
+475
+1415
+524
+Your Wins:
+NIL
+3
+1
+
+MONITOR
+1061
+476
+1227
+525
+Your Cumulative Score is:
+NIL
+3
+1
+
+MONITOR
+1440
+474
+1619
+523
+Your Losses:
+NIL
+3
+1
+
+TEXTBOX
+145
+309
+295
+329
+Payoff Matrix Values
+16
+0.0
+1
+
+TEXTBOX
+19
+354
+238
+372
+Payoff when both players cooperate
+11
+0.0
+1
+
+TEXTBOX
+234
+354
+432
+372
+Payoff to the defector of a TF scenario
+11
+0.0
+1
+
+TEXTBOX
+17
+445
+227
+463
+Payoff to the cooperator of a TF scenario
+11
+0.0
+1
+
+TEXTBOX
+235
+446
+416
+464
+Payoff when both players defect
+11
+0.0
+1
+
+MONITOR
+17
+376
+225
+425
+TT Payoff
+NIL
+3
+1
+
+MONITOR
+233
+376
+442
+425
+TF Winner Payoff
+NIL
+3
+1
+
+MONITOR
+16
+467
+226
+516
+TF Loser Payoff
+NIL
+3
+1
+
+MONITOR
+234
+468
+443
+517
+FF Payoff
+NIL
+3
+1
+
+MONITOR
+105
+168
+349
+217
+Strategy Wrap Enabled?
+NIL
+3
+1
+
+MONITOR
+105
+232
+349
+281
+Number of AI Players
+NIL
+3
+1
+
+MONITOR
+106
+101
+349
+150
+Number of Games This Simulation Will Last
+NIL
+3
+1
+
+MONITOR
+1062
+285
+1325
+334
+Your Opponent's Move History:
+NIL
+3
+1
+
+MONITOR
+1345
+285
+1620
+334
+Your Move History:
+NIL
+3
+1
+
+MONITOR
+1063
+360
+1620
+409
+Last Game Results:
+NIL
+3
+1
+
+INPUTBOX
+600
+710
+910
+770
+strategy_string
+NIL
+1
+0
+String
+
 @#$#@#$#@
 default
 0.0
