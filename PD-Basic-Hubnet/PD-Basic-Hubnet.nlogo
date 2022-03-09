@@ -1105,39 +1105,58 @@ NIL
 @#$#@#$#@
 ## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+This model allows users to run networked participatory simulations of prisoner’s dilemma tournaments. Users that connect to the activity embody agents in the tournament and play games against each other and against other AI participants. In this version of the model, the users play manually by choosing to cooperate or defect each turn of the game.
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+The simulation is made up of the players (turtles of the breed “player”), and an odd number of AI participants that each represent the prisoners of the simulation. Each simulation lasts for a set number of games, each of which lasts for a set number of turns that are played sequentially before moving on to the next turn. Each participant’s moves are represented by a strategy string which is a string representation of the moves that they intend to take in the coming turns. The string is composed of a combination of the characters T, F, C, and O which represent the actions Cooperate, Defect, Copy, and Oppose with the latter two indicating that the participant intends to copy or oppose their opponent’s last move respectively. The players progressively add T’s and F’s to their strategy string by using the “Cooperate” and “Defect” buttons on their interface while the android participants have a pre-set strategy string that represents one of the popular strategies used in PD games (e.g. always defects, tit for tat etc.).
+During the simulation, participants are matched with each other by the observer in order to play their games against each other, and each game is maintained by a link that is responsible for reading the player’s strategy strings and keeping track of any relevant information pertaining to the game it represents. For the simulation to advance (i.e. to play a turn of a game), all the players need to choose whether they want to cooperate or defect. Once every turn in a given game has been played by all the active links in the simulation, the links will commit their data to the observer, update the player’s scores, wins, and other relevant variables, and then die. The observer will then match up the participants anew to prepare for the next game in the simulation. The simulation is considered complete, once all the games have been completed and the winner of the tournament is the player with the highest cumulative score. At the end of each simulation, the organizer has the option of downloading text data of the results recorded from the simulation in a .txt file where each line represents a turn of a game played in the tournament.
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+After loading up the model, participants can connect to the activity using the Hubnet client. Once connected, a player turtle will be created to represent them and a unique color and shape combination will be assigned to them. The organizer of the activity can use the controls provided on the left-hand side of the interface (labeled “Simulation Parameters”) to set the specific variables of the simulation that the participants will be part of. Here, they can set the number of games the simulation will last, the number of turns each game will last, the number of android participants in the simulation, how the strategy strings are read, and the individual values of the payoff matrix for the simulation. It’s worth noting that once a simulation has started, changing the values mentioned will not affect the simulation. Regardless, after setting the values the simulation is ready to be initialized by using the “Setup” button which will generate any necessary agents agents, assign a randomly-picked preset strategy string to the AI participants, and create the matchups for the first game of the simulation. At this point, the client UI’s will also be initialized and each participant will be made aware of which agent in the simulation they are embodying, and all the simulation parameters chosen by the organizer will be visible on the left-hand side of the client’s UI in the “Simulation Parameters” section.
+Once the organizer hits the “Go” or “Go Once” button the state of the simulation indicated on top of the canvas changes from “Simulation Ready” to “Simulation in Progress” and the simulation will run its course as the participants play through the PD games they’re assigned to. While the simulation is running, the organizer can keep track of the macro-level output of the simulation on the right part of their user interface, while the participants can keep track of data that pertains to their games on the right hand side of their UI. The participants are able to keep track of the current turn and game of the simulation, their opponent, their scores, their move history, their opponent’s move history, and the results of the previous turn. The organizer is able to get an overall macro view of the simulation via the “Cumulative Score” and “Number of Wins” plots and they’re also able to view detailed results of all the games that human participants are part of in their output monitor and project these to the class. Once the simulation is finished, the download buttons on the lower-left hand side of the interface become usable for the organizer so they can download and distribute the results of the simulation to the participants.
 
-## THINGS TO NOTICE
+## THINGS TO NOTICE & THINGS TO TRY
 
-(suggested things for the user to notice while running the model)
-
-## THINGS TO TRY
-
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+As the participants are playing through the simulation, they should try to notice what happens when they adopt different strategies and who the top players in each tournament are. Using the data projected by the organizer’s output monitor and macro plots, what do they notice about the top performers of the tournament?  If they’ve been matched up against the top agents, how did their strategy interact with theirs? Given the parameters of the simulation the organizer created, what strategy did they think would be effective? What strategy ended up being effective in the end? How does that affect any ideas they  had about maximizing their score in the simulation?
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+When extending the model, try to think of any additional strategies that you can design for the AI participants. The current collection of strategy strings don’t actually allow for many of the popular strategies that are discussed in the literature so try to see what strategies you can come up with using the primitives provided and add them to the “STRATEGIES” list in the model’s global variables.
+Related to this point, the language currently provided for setting the strategy strings is fairly basic in that it only takes into account the history of the game as far as the previous turn, and doesn’t allow for certain moves. Thus, a good way to extend the model would be to look into ways of making the strategy string language richer.
+Finally, the model currently only allows for one simulation to be run at a time which can be a hindrance when trying to collect large amounts of data on a specific strategy. As such, try to see if you can get the model to run multiple simulations at once and see if you can get it to output the data in a form that’s useful to you.
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+Note the use of links to maintain the games between prisoners, and to log the data for each game. Also note the use and processing of the strategy strings that describe each participant’s intended moves. Finally, note how the results of each turn and game are output onto the screen and written into a file using netlogo’s output methods.
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+PD-Basic
+
+PD-Strategy-String
+
+PD-Strategy-String-Hubnet
+
+## KNOWN BUGS
+
+On account of this version of the model being a networked Hubnet activity, there are quite a few known bugs, particularly relating to the networking aspect of the model. In any case, the following bugs have been documented so far:
+
+- Participants leaving and connecting mid-simulation causes a lot of errors, moreso when connecting rather than leaving. To avoid these errors, players shouldn't connect to the activity while a simulation is in progress and they should also refrain from leaving, although the latter causes less unforeseen errors than the former.	
+- Manually managing state for all players proved to be a lot more difficult than initially expected, especially when it comes to data that is conditionally sent to some users in response to one of their actions. This results in a lot of bugs due to state variables going out of date.
+- A person connecting after a simulation has ended will initially cause an error on setup of the next simulation. kicking the player and having them reconnect seems to fix the issue although it's not always needed.
+- Not being able to use clear-all in the Hubnet version of the model also causes quite a few bugs when running multiple simulations during the same activity. This is related to the two points made above, but it's worth mentioning because it compounds the issue of having to carefully keep track of a sizable amount of data that makes up the application state.
+
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Alexandros Nikolaos Lotsos
+<alexandroslotsos2026@u.northwestern.edu>
+
+Stanford CS Material on the Prisoner’s Dilemma: https://cs.stanford.edu/people/eroberts/courses/soco/projects/1998-99/game-theory/prisoner.html
+
+Repository with the source code for this model and its related models: https://github.com/alexlo94/LS426_PD-Activities
 @#$#@#$#@
 default
 true
