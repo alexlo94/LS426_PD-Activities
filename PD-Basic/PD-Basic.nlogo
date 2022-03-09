@@ -1037,39 +1037,46 @@ NIL
 @#$#@#$#@
 ## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+This model allows users to run simulations of prisoner’s dilemma tournaments. The user embodies an agent in the tournament and plays games against other AI participants. In this version of the model, the user plays manually by choosing to cooperate or defect each turn of the game.
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+The simulation is made up of the player (a turtle of the breed “player”), and an odd number of AI participants that each represent the prisoners of the simulation. Each simulation lasts for a set number of games, each of which lasts for a set number of turns that are played sequentially before moving on to the next turn. Each participant’s moves are represented by a strategy string which is a string representation of the moves that they intend to take in the coming turns. The string is composed of a combination of the characters T, F, C, and O which represent the actions Cooperate, Defect, Copy, and Oppose with the latter two indicating that the participant intends to copy or oppose their opponent’s last move respectively. The player progressively adds T’s and F’s to their strategy string by using the “Cooperate” and “Defect” buttons on their interface while the android participants have a pre-set strategy string that represents one of the popular strategies used in PD games (e.g. always defects, tit for tat etc.).
+During the simulation, participants are matched with each other by the observer in order to play their games against each other, and each game is maintained by a link that is responsible for reading the player’s strategy strings and keeping track of any relevant information pertaining to the game it represents. For the simulation to advance (i.e. to play a turn of a game) the player needs to choose whether they want to cooperate or defect. Once every turn in a given game has been played by all the active links in the simulation, the links will commit their data to the observer, update the player’s scores, wins, and other relevant variables, and then die. The observer will then match up the turtles anew to prepare for the next game in the simulation. The simulation is considered complete, once all the games have been completed and the winner of the tournament is the player with the highest cumulative score. At the end of each simulation, the player has the option of downloading text data of the results recorded from the simulation in a .txt file where each line represents a turn of a game played in the tournament. Additionally, the player can download a subset of the simulation data that represents only the games that they took part of, if they choose to do so.
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+After loading up the model, use the controls provided on the left-hand side of the interface (labeled “Simulation Parameters”) to set the specific variables of the simulation. Here, you can set the number of games the simulation will last, the number of turns each game will last, the number of android participants in the simulation, how the AI participants’ strategy strings are read, and the individual values of the payoff matrix for the simulation. It’s worth noting that once a simulation has started, changing these values will not affect the simulation. Regardless, after setting the values the simulation is ready to be initialized by using the “Setup” button which will generate all the agents, assign a randomly-picked preset strategy string to the AI participants, and create the matchups for the first game of the simulation.
+Once you hit the “Go” or “Go Once” button you’ll notice the state of the simulation indicated on top of the canvas changing from “Simulation Ready” to “Simulation in Progress”. The controls on the bottom of the canvas are now usable and you are able to play through the games of the simulation. While playing, pay attention to the canvas, and the output of the simulation on the right part of the user interface. Here, you’ll be able to keep track of the current turn and game of the simulation, your opponent, your scores, and you’re able to get an overall macro view of the simulation via the “Cumulative Score” and “Number of Wins” plots. Finally, pay special attention to the output monitor which will give you detailed results about each turn of any games you’re part of. Once the simulation is finished, the download buttons on the lower-left hand side of the interface become usable so you can study the results of the simulations in depth.
 
-## THINGS TO NOTICE
+## THINGS TO NOTICE & THINGS TO TRY
 
-(suggested things for the user to notice while running the model)
-
-## THINGS TO TRY
-
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+As you are playing through the simulation, try to notice what happens when you adopt different strategies and who the top players in each tournament are. Using the inspector window, what do you notice about the top performers of the tournament?  If you’ve been matched up against the top agents, scroll through your output monitor and see how your strategy interacted with theirs. Given the parameters of the simulation you created, what strategy did you think would be effective? What strategy ended up being effective in the end? How does that affect any ideas you had about maximizing your score in the simulation?
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+When extending the model, try to think of any additional strategies that you can design for the AI participants. The current collection of strategy strings don’t actually allow for many of the popular strategies that are discussed in the literature so try to see what strategies you can come up with using the primitives provided and add them to the “STRATEGIES” list in the model’s global variables.
+ Related to this point, the language currently provided for setting the strategy strings is fairly basic in that it only takes into account the history of the game as far as the previous turn, and doesn’t allow for certain moves. Thus, a good way to extend the model would be to look into ways of making the strategy string language richer.
+Finally, the model currently only allows for one simulation to be run at a time which can be a hindrance when trying to collect large amounts of data on a specific strategy. As such, try to see if you can get the model to run multiple simulations at once and see if you can get it to output the data in a form that’s useful to you.
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+Note the use of links to maintain the games between prisoners, and to log the data for each game. Also note the use and processing of the strategy strings that describe each participant’s intended moves. Finally, note how the results of each turn and game are output onto the screen and written into a file using netlogo’s output methods.
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+PD-Strategy-String
+PD-Basic-Hubnet
+PD-Strategy-String-Hubnet
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Alexandros Nikolaos Lotsos
+<alexandroslotsos2026@u.northwestern.edu>
+
+Stanford CS Material on the Prisoner’s Dilemma: https://cs.stanford.edu/people/eroberts/courses/soco/projects/1998-99/game-theory/prisoner.html
+
+Repository with the source code for this model and its related models: https://github.com/alexlo94/LS426_PD-Activities
 @#$#@#$#@
 default
 true
